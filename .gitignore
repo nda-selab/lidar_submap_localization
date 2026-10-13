@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# ROS 2 / colcon
+build/
+install/
+log/
+
+# Editor
+.vscode/
+.idea/
+
+# Dataset and generated maps
+*.pcd
+*.bag
+*.db3
+*.mcap
