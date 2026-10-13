@@ -1,10 +1,35 @@
-# lidar_submap_localization（ROS 2 Humble）
+# lidar_submap_localization
 
 本パッケージは、LiDAR SLAMのオドメトリ座標系で生成した**スライディング方式の局所サブマップ**と、固定された3次元事前地図（PCD）を照合し、事前地図上の自己位置・姿勢を推定する。
 
 FAST-LIO2の内部処理やオドメトリは変更しない。GICP（Generalized ICP）によって座標変換 **`T_map_odom`** を推定し、照合結果が品質判定に合格した場合にのみ `map -> odom` のTFを配信する。
 
-## 1. 入出力インターフェース
+## Environment
+
+| Type | Details |
+| --- | --- |
+| OS | Ubuntu 22.04 LTS |
+| ROS | ROS 2 Humble |
+
+## Installation
+
+ROS 2 Humble、PCL、Eigen3、`pcl_conversions`、`tf2_ros`、および`package.xml`に記載したROSメッセージ関連パッケージを使用する。
+
+```bash
+cd ~/ros2_ws/src
+
+git clone git@github.com:nda-selab/lidar_submap_localization.git
+
+cd ~/ros2_ws
+
+source /opt/ros/humble/setup.bash
+
+colcon build --symlink-install --packages-select lidar_submap_localization
+
+source install/setup.bash
+```
+
+## 入出力インターフェース
 
 | Category | Topic | Type | Description |
 | --- | --- | --- | --- |
@@ -17,7 +42,7 @@ FAST-LIO2の内部処理やオドメトリは変更しない。GICP（Generalize
 | 出力 | `/localization/submap` | `sensor_msgs/msg/PointCloud2` | `odom`座標系のスライディングサブマップ（RViz表示用） |
 | 出力 | `/localization/status` | `std_msgs/msg/String` | `ACCEPT`、`REJECT_*`、`WAIT_*`と、適合度・重なり率・補正量などの診断情報 |
 
-## 2. 座標系と推定原理
+## 座標系と推定原理
 
 ```text
 map --（本パッケージ：GICP）--> odom --（odom_to_base_link）--> base_link
@@ -42,27 +67,7 @@ frames:
 >
 > Nav2用の2次元地図`maps/map.yaml`と3次元事前地図PCDは、原点・軸方向・スケールが整合する**同じ`map`座標系**で用意する必要がある。別の原点で生成したPCDは、座標変換してから`map`座標系の地図として保存すること。ROSのTFフレーム名だけを変更しても地図の不整合は解消しない。
 
-## 3. ビルド
-
-ROS 2 Humble、PCL、Eigen3、`pcl_conversions`、`tf2_ros`、および`package.xml`に記載したROSメッセージ関連パッケージを使用する。
-
-```bash
-cd ~/ros2_ws/src
-# 本パッケージを ~/ros2_ws/src/lidar_submap_localization に配置する
-cd ~/ros2_ws
-
-# 本ワークスペースをunderlayとして読み込んでいない、新しいシェルで実行する
-source /opt/ros/humble/setup.bash
-
-CMAKE_BUILD_PARALLEL_LEVEL=1 colcon build --symlink-install \
-  --packages-select lidar_submap_localization --parallel-workers 1 \
-  --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O2 -g0 -DNDEBUG"
-
-source install/setup.bash
-```
-
-## 4. 最初の動作確認：自己位置推定のみ（推奨）
+## 最初の動作確認：自己位置推定のみ（推奨）
 
 FAST-LIO2などのSLAM、`odom_to_base_link.py`、既存の静的TF、およびRVizを別途起動する。`/cloud_registered`と`/odom_nav`の座標系が想定どおりであることを確認してから、本パッケージを起動する。
 
@@ -82,18 +87,7 @@ RVizの「2D Pose Estimate」から、`map`座標系の`/initialpose`を送信�
 
 **最初のGICP照合が品質判定に合格するまで、`map -> odom`のTFは配信されない。** 自動的な大域位置認識・初期位置探索は実装していない。
 
-### 動作確認コマンド
-
-```bash
-ros2 topic echo /localization/status
-ros2 topic echo /localization/pose --once
-ros2 topic echo /localization/submap --once --field header
-ros2 run tf2_ros tf2_echo map odom
-ros2 topic echo /cloud_registered --once --field header
-ros2 topic echo /odom_nav --once --field child_frame_id
-```
-
-## 5. WHILL・Nav2との統合起動
+## WHILL・Nav2との統合起動
 
 既存のAMCLによる位置推定を使用する起動構成を、3次元事前地図照合方式に置き換える。
 
@@ -127,7 +121,7 @@ Launch側ではFAST-LIO2とNav2も起動するため、再生するbagには必�
 
 **オフライン検証時の速度指令を、接続中のWHILLドライバへ送ってはいけない。**
 
-## 6. サブマップ生成・地図照合・棄却条件
+## サブマップ生成・地図照合・棄却条件
 
 - **サブマップ生成**：各スキャンを`scan_voxel_size`でボクセルダウンサンプリングした後、`odom`座標系で直近5秒・最大60スキャンをスライディングバッファに保持し、`submap_voxel_size`で再度ダウンサンプリングする。
 - **事前地図の準備**：起動時に`prior_map_voxel_size`でダウンサンプリングし、予測された`map`座標系の車体位置の周辺から、XYZ方向の局所領域を抽出する。
@@ -142,29 +136,15 @@ Launch側ではFAST-LIO2とNav2も起動するため、再生するbagには必�
 - 正確性は、記録済み走行軌跡や独立した基準点を使用して評価する必要がある。
 - SLAMのオドメトリやサブマップに対するループ閉じ込み、非剛体的な変形補正は行わない。
 
-## 7. 安全上の重要事項
+## 安全上の重要事項
 
 1. **自己位置推定の失敗は、自動停止を保証しない。** `map -> odom`のTFが途絶した場合や誤った姿勢が推定された場合にも、安全な停止が保証されるわけではない。Nav2とWHILLの走行系には、推定結果の鮮度と妥当性を監視する独立した停止機構が必要である。既存の速度指令Watchdogは指令の受信状況を監視するだけで、自己位置推定の状態は監視しない。
 2. **Watchdog自体の故障に備える必要がある。** `whill_nav2_bringup`の`whill_cmd_vel_watchdog`は`/cmd_vel`のタイムアウト時にゼロ速度を出力するが、Watchdogの停止やPCの故障時には停止を保証できない。ドライバまたは車体制御器における通信断時の停止機構が不可欠である。
 3. **WHILL実機での検証は未完了。** まず記録済みbagで検証し、次に駆動輪を安全に切り離した状態などで試験し、その後に監督下で低速走行を行う。
 
-## 8. パラメータ
+## 関連ファイル
 
-各設定値は`config/localization.yaml`を参照する。品質判定の閾値は、実験データに基づいて調整するための初期値であり、安全性を保証するものではない。
-
-GICPの`getFitnessScore`は、おおむね**距離の二乗（m²）**に相当する指標として扱う。補正量の判定では、TF変換の原点ではなく、**現在の車体位置**の変化を比較する。
-
-## 9. 開発・診断用コマンド
-
-```bash
-# Launchファイルと設定の基本チェック
-python3 -m compileall -q launch
-python3 -m pytest -q test/test_config.py
-
-# 実行中のトピック配信元・購読先の確認
-ros2 topic info /tf --verbose
-ros2 topic info /cmd_vel --verbose
-ros2 topic info /whill/controller/cmd_vel --verbose
-```
-
-詳細な導入手順については`INSTALL_JA.md`も参照する。
+- [`config/localization.yaml`](config/localization.yaml)：設定YAMLファイル
+- [`config/README.md`](config/README.md)：設定パラメータ説明
+- [`config/README.md`](config/README.md)：設定パラメータ説明
+- [`doc/INSTALL_JA.md`](doc/INSTALL_JA.md)：導入・検証手順

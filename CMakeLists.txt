@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
+
+cmake_policy(SET CMP0074 NEW)
+
 project(lidar_submap_localization)
 
 if(NOT CMAKE_CXX_STANDARD)
@@ -23,8 +26,15 @@ target_link_libraries(submap_localizer ${PCL_LIBRARIES} Eigen3::Eigen)
 ament_target_dependencies(submap_localizer
   rclcpp sensor_msgs nav_msgs geometry_msgs std_msgs tf2_ros pcl_conversions)
 
-install(TARGETS submap_localizer DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
+install(TARGETS
+  submap_localizer
+  DESTINATION lib/${PROJECT_NAME})
+
+install(DIRECTORY
+  config
+  launch
+  doc
+  DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest QUIET)
